@@ -1,0 +1,106 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    /* Brand: Indigo/Violet (modern, professional) */
+    --background: 0 0% 100%;
+    --foreground: 250 24% 10%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 250 24% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 250 24% 10%;
+
+    --primary: 252 94% 56%;       /* indigo-500 */
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 255 100% 98%;    /* light indigo tint */
+    --secondary-foreground: 252 60% 20%;
+
+    --muted: 252 40% 96%;
+    --muted-foreground: 250 8% 40%;
+
+    --accent: 268 100% 98%;       /* violet tint */
+    --accent-foreground: 268 60% 24%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 250 18% 90%;
+    --input: 250 18% 90%;
+    --ring: 252 94% 56%;
+
+    --radius: 0.5rem;
+
+    --sidebar-background: 0 0% 98%;
+
+    --sidebar-foreground: 240 5.3% 26.1%;
+
+    --sidebar-primary: 240 5.9% 10%;
+
+    --sidebar-primary-foreground: 0 0% 98%;
+
+    --sidebar-accent: 240 4.8% 95.9%;
+
+    --sidebar-accent-foreground: 240 5.9% 10%;
+
+    --sidebar-border: 220 13% 91%;
+
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  .dark {
+    --background: 250 24% 8%;
+    --foreground: 0 0% 100%;
+
+    --card: 250 24% 10%;
+    --card-foreground: 0 0% 100%;
+
+    --popover: 250 24% 10%;
+    --popover-foreground: 0 0% 100%;
+
+    --primary: 255 100% 77%;      /* indigo-300 for dark accents */
+    --primary-foreground: 252 94% 12%;
+
+    --secondary: 252 20% 16%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 252 20% 16%;
+    --muted-foreground: 250 12% 70%;
+
+    --accent: 268 30% 18%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 62% 40%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 252 16% 24%;
+    --input: 252 16% 24%;
+    --ring: 255 100% 77%;
+    --sidebar-background: 252 20% 12%;
+    --sidebar-foreground: 0 0% 100%;
+    --sidebar-primary: 255 100% 77%;
+    --sidebar-primary-foreground: 252 94% 12%;
+    --sidebar-accent: 268 30% 18%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 252 16% 24%;
+    --sidebar-ring: 255 100% 77%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+}

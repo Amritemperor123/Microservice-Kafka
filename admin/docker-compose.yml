@@ -1,0 +1,80 @@
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    container_name: admin-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "22181:2181"
+    networks:
+      - admin-network
+
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    container_name: admin-kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "29092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    networks:
+      - admin-network
+
+  backend:
+    build:
+      context: ./backend
+    container_name: admin-backend
+    ports:
+      - "3004:3004"
+    volumes:
+      - ./backend/data:/app/data
+      - shared-certificates:/app/certificates
+    environment:
+      - NODE_ENV=production
+      - PORT=3004
+      - KAFKA_BROKER=kafka:9092
+      - DATABASE_PATH=/app/data/admin.db
+      - SHARED_STORAGE_PATH=/app/certificates
+    depends_on:
+      - kafka
+    restart: unless-stopped
+    networks:
+      - admin-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3004/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # For independent run, frontend accesses backend via localhost:3004 (from user browser)
+        - VITE_API_URL=http://localhost:3004
+        - VITE_WS_URL=ws://localhost:3004
+    container_name: admin-frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - admin-network
+
+networks:
+  admin-network:
+    driver: bridge
+
+volumes:
+  shared-certificates:

@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Government Certificate Services</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="min-h-screen bg-background">
+
+  <!-- Header (Replace GovHeader with a simple navbar) -->
+  <header class="w-full bg-primary text-white py-4 shadow-md">
+    <div class="container mx-auto px-4 flex justify-between items-center">
+      <h1 class="text-2xl font-bold">GovPortal</h1>
+      <nav class="space-x-6">
+        <a href="/" class="hover:underline">Home</a>
+        <a href="/birth-certificate" class="hover:underline">Birth Certificate</a>
+        <a href="/death-certificate" class="hover:underline">Death Certificate</a>
+        <a href="/admin" class="hover:underline">Admin</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container mx-auto px-4 py-12">
+
+    <div class="text-center mb-12">
+      <h1 class="text-4xl font-bold text-foreground mb-4">Government Certificate Services</h1>
+      <p class="text-xl text-muted-foreground max-w-2xl mx-auto">
+        Official portal for birth and death certificate generation and management
+      </p>
+    </div>
+
+    <!-- Cards Section -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
+
+      <!-- Birth Certificate -->
+      <div class="border rounded-xl p-6 shadow-sm hover:shadow-lg transition-shadow">
+        <div class="text-center">
+          <div class="mx-auto mb-4 h-16 w-16 rounded-full bg-blue-100 flex items-center justify-center">
+            <svg class="h-8 w-8 text-blue-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17h11a2.5 2.5 0 0 1 2.5 2.5V21H4v-1.5Z" />
+              <path d="M8 17V7h8v10M12 7V3m4 4V5m-8 2V5" />
+            </svg>
+          </div>
+          <h2 class="text-xl font-bold">Birth Certificate</h2>
+          <p class="text-muted-foreground mb-4">Generate official birth certificates</p>
+          <a href="/birth-certificate" class="block">
+            <button class="w-full bg-blue-600 text-white py-2 rounded-lg">Apply Now</button>
+          </a>
+        </div>
+      </div>
+
+      <!-- Death Certificate -->
+      <div class="border rounded-xl p-6 shadow-sm hover:shadow-lg transition-shadow">
+        <div class="text-center">
+          <div class="mx-auto mb-4 h-16 w-16 rounded-full bg-blue-100 flex items-center justify-center">
+            <svg class="h-8 w-8 text-blue-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path d="M19 21H5a2 2 0 0 1-2-2V7l4-4h10l4 4v12a2 2 0 0 1-2 2Zm-7-6v-4m0 0V7m0 4h4m-4 0H8" />
+            </svg>
+          </div>
+          <h2 class="text-xl font-bold">Death Certificate</h2>
+          <p class="text-muted-foreground mb-4">Generate official death certificates</p>
+          <a href="/death-certificate" class="block">
+            <button class="w-full bg-blue-600 text-white py-2 rounded-lg">Apply Now</button>
+          </a>
+        </div>
+      </div>
+
+    </div>
+
+  </main>
+
+</body>
+</html>
