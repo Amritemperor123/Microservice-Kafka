@@ -222,6 +222,3 @@ These currently cover:
 - Admin realtime traffic is authenticated and redacted.
 - Aadhaar file uploads are intentionally not part of the UI anymore because the backend does not accept document uploads.
 
-## Review Status
-
-Current project status and resolved issues are tracked in [REVIEW_FINDINGS.md](./REVIEW_FINDINGS.md).
