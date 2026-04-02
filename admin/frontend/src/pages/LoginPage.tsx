@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -9,6 +9,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { ShieldCheck, Eye, EyeOff, Lock } from "lucide-react";
+import { setAuthSession, isAuthenticated as hasAuthSession } from "@/lib/auth";
 
 const loginSchema = z.object({
   username: z.string().min(1, "Username is required"),
@@ -23,6 +24,12 @@ export const LoginPage = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
+
+  useEffect(() => {
+    if (hasAuthSession()) {
+      navigate("/dashboard", { replace: true });
+    }
+  }, [navigate]);
 
   const form = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
@@ -48,10 +55,8 @@ export const LoginPage = () => {
 
       const result = await response.json();
 
-      if (response.ok && result.authenticated) {
-        // Store authentication state
-        localStorage.setItem("isAuthenticated", "true");
-        localStorage.setItem("adminUser", data.username);
+      if (response.ok && result.authenticated && result.token) {
+        setAuthSession(result.token, data.username);
 
         toast({
           title: "Login Successful",

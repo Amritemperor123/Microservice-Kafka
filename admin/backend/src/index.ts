@@ -4,7 +4,10 @@ import http from 'http';
 import db from './database';
 import path from 'path';
 import fs from 'fs';
-import { initWebSocketServer, initKafkaConsumer, disconnect } from './kafka-websocket';
+import crypto from 'crypto';
+import { initWebSocketServer, initKafkaConsumer, disconnect, getKafkaStatus } from './kafka-websocket';
+import { issueAdminToken, requireAdminAuth } from './auth';
+import { verifyPassword } from './passwords';
 
 const app = express();
 const port = process.env.PORT || 3004;
@@ -12,13 +15,38 @@ const server = http.createServer(app);
 
 app.use(cors());
 app.use(express.json());
+app.use((req, res, next) => {
+  const requestId = (req.headers['x-request-id'] as string | undefined) || crypto.randomUUID();
+  res.locals.requestId = requestId;
+  res.setHeader('X-Request-Id', requestId);
+  console.log(JSON.stringify({ level: 'info', service: 'admin-service', requestId, method: req.method, path: req.path, event: 'request.received' }));
+  next();
+});
+
+function isDatabaseHealthy(): boolean {
+  try {
+    db.prepare('SELECT 1').get();
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 // Initialize WebSocket Server
 initWebSocketServer(server);
 
 // Health check
 app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'healthy', service: 'admin-service' });
+  const kafkaStatus = getKafkaStatus();
+  const databaseHealthy = isDatabaseHealthy();
+  const isHealthy = kafkaStatus.consumerConnected && databaseHealthy;
+  res.status(200).json({
+    status: isHealthy ? 'healthy' : 'degraded',
+    service: 'admin-service',
+    kafka: kafkaStatus,
+    database: databaseHealthy,
+    timestamp: new Date().toISOString()
+  });
 });
 
 // Auth endpoints
@@ -29,20 +57,20 @@ app.post('/login', (req, res) => {
     const stmt = db.prepare('SELECT * FROM users WHERE username = ?');
     const user = stmt.get(username) as any;
 
-    // Simple password check (in prod, use bcrypt)
-    if (user && user.password_hash === password) {
-      res.json({ success: true, token: 'dummy-token', username: user.username });
+    if (user && verifyPassword(password, user.password_hash)) {
+      const token = issueAdminToken(user.username);
+      res.json({ success: true, authenticated: true, token, username: user.username });
     } else {
-      res.status(401).json({ success: false, message: 'Invalid credentials' });
+      res.status(401).json({ success: false, authenticated: false, message: 'Invalid credentials' });
     }
   } catch (error) {
     console.error('Login error:', error);
-    res.status(500).json({ success: false, message: 'Internal server error' });
+    res.status(500).json({ success: false, authenticated: false, message: 'Internal server error' });
   }
 });
 
 // Get system stats
-app.get('/stats', (req, res) => {
+app.get('/stats', requireAdminAuth, (req, res) => {
   try {
     const pdfCount = db.prepare('SELECT COUNT(*) as count FROM pdfs').get() as { count: number };
     const logCount = db.prepare('SELECT COUNT(*) as count FROM logs').get() as { count: number };
@@ -59,7 +87,7 @@ app.get('/stats', (req, res) => {
 });
 
 // Get all PDFs (Read Model)
-app.get('/pdfs', (req, res) => {
+app.get('/pdfs', requireAdminAuth, (req, res) => {
   try {
     const pdfs = db.prepare('SELECT * FROM pdfs ORDER BY created_at DESC LIMIT 100').all();
     res.json(pdfs);
@@ -72,10 +100,10 @@ app.get('/pdfs', (req, res) => {
 // Serve PDF files
 // In Docker, shares /app/certificates
 const certificatesPath = process.env.SHARED_STORAGE_PATH || path.join(__dirname, '..', '..', 'certificates');
-app.use('/pdf-files', express.static(certificatesPath));
+app.use('/pdf-files', requireAdminAuth, express.static(certificatesPath));
 
 // Endpoint to view specific PDF via ID (lookup path)
-app.get('/pdf/:id', (req, res) => {
+app.get('/pdf/:id', requireAdminAuth, (req, res) => {
   try {
     const stmt = db.prepare('SELECT filePath FROM pdfs WHERE id = ?');
     const result = stmt.get(req.params.id) as { filePath: string };

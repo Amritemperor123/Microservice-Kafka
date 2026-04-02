@@ -16,6 +16,7 @@ import {
   LogOut
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { buildAuthHeaders, clearAuthSession, getAuthToken } from "@/lib/auth";
 
 interface PdfRecord {
   id: number;
@@ -50,7 +51,9 @@ export const Dashboard = () => {
   const fetchData = async () => {
     try {
       const apiUrl = import.meta.env.VITE_API_URL;
-      const response = await fetch(`${apiUrl}/pdfs`);
+      const response = await fetch(`${apiUrl}/pdfs`, {
+        headers: buildAuthHeaders(),
+      });
       if (!response.ok) throw new Error('Failed to fetch data');
 
       const data = await response.json();
@@ -87,7 +90,8 @@ export const Dashboard = () => {
 
     // WebSocket Connection
     const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:3004';
-    const ws = new WebSocket(wsUrl);
+    const token = getAuthToken();
+    const ws = new WebSocket(token ? `${wsUrl}?token=${encodeURIComponent(token)}` : wsUrl);
     wsRef.current = ws;
 
     ws.onopen = () => {
@@ -166,26 +170,55 @@ export const Dashboard = () => {
   };
 
   const viewPdf = (pdfId: number) => {
-    // In new architecture, we need a way to view PDF. 
-    // The admin backend doesn't serve files directly anymore ideally, 
-    // but for now we might rely on the fact that they are in shared storage 
-    // and Admin Backend CAN serve them if configured.
-    // DOES Admin Backend serve static files?
-    // Not explicitly in my index.ts. 
-    // I should probably add static file serving for /certificates in admin backend.
+    fetch(`${import.meta.env.VITE_API_URL}/pdf/${pdfId}`, {
+      headers: buildAuthHeaders(),
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error("Failed to fetch PDF");
+        }
 
-    // For now assuming existing behavior or that I'll fix it.
-    // The API URL is import.meta.env.VITE_API_URL
-    window.open(`${import.meta.env.VITE_API_URL}/pdf/${pdfId}`, '_blank');
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        window.open(url, "_blank", "noopener,noreferrer");
+        window.setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
+      })
+      .catch((error) => {
+        console.error("Error viewing PDF:", error);
+        toast({
+          title: "Error",
+          description: "Unable to open the PDF.",
+          variant: "destructive",
+        });
+      });
   };
 
-  const downloadPdf = (pdfId: number, fileName: string) => {
-    const link = document.createElement('a');
-    link.href = `${import.meta.env.VITE_API_URL}/pdf/${pdfId}`;
-    link.download = fileName;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const downloadPdf = async (pdfId: number, fileName: string) => {
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/pdf/${pdfId}`, {
+        headers: buildAuthHeaders(),
+      });
+      if (!response.ok) {
+        throw new Error("Failed to download PDF");
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Error downloading PDF:", error);
+      toast({
+        title: "Error",
+        description: "Unable to download the PDF.",
+        variant: "destructive",
+      });
+    }
   };
 
   const formatDate = (dateString: string) => {
@@ -203,8 +236,7 @@ export const Dashboard = () => {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem("isAuthenticated");
-    localStorage.removeItem("adminUser");
+    clearAuthSession();
     toast({
       title: "Logged Out",
       description: "You have been successfully logged out.",
@@ -359,6 +391,15 @@ export const Dashboard = () => {
                       >
                         <Eye className="h-4 w-4 mr-2" />
                         View
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => downloadPdf(pdf.id, pdf.fileName)}
+                        className="w-full"
+                      >
+                        <Download className="h-4 w-4 mr-2" />
+                        Download
                       </Button>
                     </div>
                   </div>

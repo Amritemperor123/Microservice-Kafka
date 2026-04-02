@@ -13,10 +13,13 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Info, ShieldCheck } from "lucide-react";
 
 export const DeathCertificateForm = () => {
-
   const [showConsentDialog, setShowConsentDialog] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [lastGeneratedPdf, setLastGeneratedPdf] = useState<{ id: number; fileName?: string } | null>(null);
+  const [submissionState, setSubmissionState] = useState<{
+    id: number;
+    status: string;
+    pdfReady: boolean;
+  } | null>(null);
   const { toast } = useToast();
 
   const form = useForm<DeathCertificateFormType>({
@@ -84,14 +87,15 @@ export const DeathCertificateForm = () => {
       const result = await res.json();
 
       toast({
-        title: "Success",
-        description: "Death certificate application submitted and PDF generated successfully!",
+        title: "Application Submitted",
+        description: "Death certificate request submitted. PDF generation is in progress.",
       });
 
-      // Store the generated PDF details for UI access (view/download)
-      if (result.pdfId) {
-        setLastGeneratedPdf({ id: result.pdfId, fileName: result.pdfFileName });
-      }
+      setSubmissionState({
+        id: result.submissionId,
+        status: result.status ?? "pending",
+        pdfReady: result.status === "pdf_ready",
+      });
     } catch (error) {
       console.error('Error submitting form:', error);
       toast({
@@ -109,13 +113,48 @@ export const DeathCertificateForm = () => {
   const successRef = useRef<HTMLDivElement | null>(null);
   const [successVisible, setSuccessVisible] = useState(false);
   useEffect(() => {
-    if (lastGeneratedPdf && successRef.current) {
+    if (submissionState && successRef.current) {
       successRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
       requestAnimationFrame(() => setSuccessVisible(true));
     } else {
       setSuccessVisible(false);
     }
-  }, [lastGeneratedPdf]);
+  }, [submissionState]);
+
+  useEffect(() => {
+    if (!submissionState || submissionState.pdfReady) {
+      return;
+    }
+
+    const intervalId = window.setInterval(async () => {
+      try {
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/submission/${submissionState.id}`);
+        if (!response.ok) {
+          return;
+        }
+
+        const result = await response.json();
+        const nextStatus = result.status ?? "pending";
+        const pdfReady = nextStatus === "pdf_ready";
+
+        setSubmissionState((current) => current && current.id === submissionState.id
+          ? { ...current, status: nextStatus, pdfReady }
+          : current);
+
+        if (pdfReady) {
+          toast({
+            title: "PDF Ready",
+            description: `Submission #${submissionState.id} is ready to view or download.`,
+          });
+          window.clearInterval(intervalId);
+        }
+      } catch (error) {
+        console.error("Error polling submission status:", error);
+      }
+    }, 3000);
+
+    return () => window.clearInterval(intervalId);
+  }, [submissionState, toast]);
 
   return (
     <>
@@ -289,25 +328,6 @@ export const DeathCertificateForm = () => {
                         )}
                       />
                     </div>
-                    <FormField
-                      control={form.control}
-                      name="AadhaarFile"
-                      render={({ field: { onChange, value, ...field } }) => (
-                        <FormItem>
-                          <FormLabel>AADHAAR Document (Image/PDF)</FormLabel>
-                          <FormControl>
-                            <Input
-                              type="file"
-                              accept=".pdf,.jpg,.jpeg,.png"
-                              onChange={(e) => onChange(e.target.files?.[0])}
-                              {...field}
-                            />
-                          </FormControl>
-                          <p className="text-xs text-muted-foreground">Accepted: PDF/JPG/PNG</p>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
                   </div>
 
                   <Separator />
@@ -397,38 +417,45 @@ export const DeathCertificateForm = () => {
         </CardContent>
       </Card>
 
-      {lastGeneratedPdf && (
+      {submissionState && (
         <Card ref={successRef} className={`w-full max-w-4xl mx-auto mt-6 transition-opacity duration-500 ${successVisible ? 'opacity-100' : 'opacity-0'}`}>
           <CardHeader>
-            <CardTitle>Your Generated Certificate</CardTitle>
-            <CardDescription>Only you can access this certificate from here.</CardDescription>
+            <CardTitle>Submission Status</CardTitle>
+            <CardDescription>Track the request until the PDF is generated.</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex items-center justify-between p-4 border rounded-lg">
               <div>
-                <div className="font-medium">{lastGeneratedPdf.fileName || `Certificate #${lastGeneratedPdf.id}`}</div>
-                <div className="text-xs text-gray-500 mt-1">Success! Keep this window to view or download your certificate.</div>
+                <div className="font-medium">{`Submission #${submissionState.id}`}</div>
+                <div className="text-xs text-gray-500 mt-1">
+                  {submissionState.pdfReady
+                    ? "The PDF is ready. You can view or download it now."
+                    : "Your request is being processed. This page will update automatically."}
+                </div>
+                <div className="text-xs text-gray-500 mt-1">Current status: {submissionState.status}</div>
               </div>
               <div className="flex gap-2">
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => window.open(`${import.meta.env.VITE_API_URL}/pdf/${lastGeneratedPdf.id}`, '_blank')}
+                  disabled={!submissionState.pdfReady}
+                  onClick={() => window.open(`${import.meta.env.VITE_API_URL}/submission/${submissionState.id}/pdf`, '_blank')}
                 >
                   View
                 </Button>
                 <Button
                   variant="outline"
                   size="sm"
+                  disabled={!submissionState.pdfReady}
                   onClick={async () => {
                     try {
-                      const response = await fetch(`${import.meta.env.VITE_API_URL}/pdf/${lastGeneratedPdf.id}`);
+                      const response = await fetch(`${import.meta.env.VITE_API_URL}/submission/${submissionState.id}/pdf`);
                       if (!response.ok) throw new Error('Failed to download PDF');
                       const blob = await response.blob();
                       const url = window.URL.createObjectURL(blob);
                       const a = document.createElement('a');
                       a.href = url;
-                      a.download = lastGeneratedPdf.fileName || `certificate_${lastGeneratedPdf.id}.pdf`;
+                      a.download = `death_certificate_submission_${submissionState.id}.pdf`;
                       document.body.appendChild(a);
                       a.click();
                       window.URL.revokeObjectURL(url);

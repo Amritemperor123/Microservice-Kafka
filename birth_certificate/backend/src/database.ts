@@ -22,4 +22,26 @@ db.exec(`
   )
 `);
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS outbox_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    topic TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    status TEXT DEFAULT 'pending',
+    retry_count INTEGER DEFAULT 0,
+    last_error TEXT,
+    next_attempt_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    published_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )
+`);
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS processed_events (
+    event_id TEXT PRIMARY KEY,
+    topic TEXT NOT NULL,
+    processed_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )
+`);
+
 export default db;

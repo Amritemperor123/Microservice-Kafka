@@ -5,13 +5,17 @@ services:
   # ============================================
   
   zookeeper:
-    image: confluentinc/cp-zookeeper:latest
+    image: confluentinc/cp-zookeeper:7.5.3
     container_name: zookeeper
+    restart: unless-stopped
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
     ports:
       - "2181:2181"
+    volumes:
+      - zookeeper-data:/var/lib/zookeeper/data
+      - zookeeper-log:/var/lib/zookeeper/log
     networks:
       - microservice-network
     healthcheck:
@@ -21,8 +25,9 @@ services:
       retries: 5
 
   kafka:
-    image: confluentinc/cp-kafka:latest
+    image: confluentinc/cp-kafka:7.5.3
     container_name: kafka
+    restart: unless-stopped
     depends_on:
       zookeeper:
         condition: service_healthy
@@ -35,14 +40,35 @@ services:
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
     networks:
       - microservice-network
+    volumes:
+      - kafka-data:/var/lib/kafka/data
     healthcheck:
       test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
       interval: 10s
       timeout: 10s
       retries: 5
+
+  kafka-init:
+    image: confluentinc/cp-kafka:7.5.3
+    container_name: kafka-init
+    restart: "no"
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command: >
+      "
+      kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --topic certificate-requests --replication-factor 1 --partitions 1 &&
+      kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --topic pdf-generation-requests --replication-factor 1 --partitions 1 &&
+      kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --topic pdf-generation-complete --replication-factor 1 --partitions 1 &&
+      kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --topic admin-logs --replication-factor 1 --partitions 1
+      "
+    networks:
+      - microservice-network
 
   # ============================================
   # Microservices
@@ -51,9 +77,12 @@ services:
   birth-backend:
     build: ./birth_certificate/backend
     container_name: birth-backend
+    restart: unless-stopped
     depends_on:
       kafka:
         condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
     environment:
       PORT: 3001
       NODE_ENV: production
@@ -74,6 +103,7 @@ services:
   birth-frontend:
     build: ./birth_certificate/frontend
     container_name: birth-frontend
+    restart: unless-stopped
     depends_on:
       - birth-backend
     networks:
@@ -82,9 +112,12 @@ services:
   death-backend:
     build: ./death_certificate/backend
     container_name: death-backend
+    restart: unless-stopped
     depends_on:
       kafka:
         condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
     environment:
       PORT: 3002
       NODE_ENV: production
@@ -105,6 +138,7 @@ services:
   death-frontend:
     build: ./death_certificate/frontend
     container_name: death-frontend
+    restart: unless-stopped
     depends_on:
       - death-backend
     networks:
@@ -113,9 +147,12 @@ services:
   pdf-service:
     build: ./pdf_service/backend
     container_name: pdf-service
+    restart: unless-stopped
     depends_on:
       kafka:
         condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
     environment:
       PORT: 3003
       NODE_ENV: production
@@ -136,9 +173,12 @@ services:
   admin-backend:
     build: ./admin/backend
     container_name: admin-backend
+    restart: unless-stopped
     depends_on:
       kafka:
         condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
     environment:
       PORT: 3004
       NODE_ENV: production
@@ -159,6 +199,7 @@ services:
   admin-frontend:
     build: ./admin/frontend
     container_name: admin-frontend
+    restart: unless-stopped
     depends_on:
       - admin-backend
     networks:
@@ -169,8 +210,9 @@ services:
   # ============================================
 
   gateway:
-    image: nginx:alpine
+    image: nginx:1.27-alpine
     container_name: gateway
+    restart: unless-stopped
     ports:
       - "80:80"
     volumes:
@@ -202,4 +244,10 @@ networks:
 
 volumes:
   shared-certificates:
+    driver: local
+  zookeeper-data:
+    driver: local
+  zookeeper-log:
+    driver: local
+  kafka-data:
     driver: local

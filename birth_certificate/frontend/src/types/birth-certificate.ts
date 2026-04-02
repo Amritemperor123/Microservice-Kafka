@@ -8,19 +8,15 @@ export interface BirthCertificateForm {
   placeOfBirth: string;
   fatherName: string;
   fatherAadhaarNumber: string;
-  fatherAadhaarFile?: File;
   motherName: string;
   motherAadhaarNumber: string;
-  motherAadhaarFile?: File;
   issuingAuthority?: string;
   registrationNumber?: string;
   aadhaarConsentGiven: boolean;
 }
 
-export interface BirthCertificate extends Omit<BirthCertificateForm, 'fatherAadhaarFile' | 'motherAadhaarFile'> {
+export interface BirthCertificate extends BirthCertificateForm {
   id: string;
-  fatherAadhaarFilePath?: string;
-  motherAadhaarFilePath?: string;
   aadhaarConsentTimestamp?: string;
   status: 'draft' | 'submitted' | 'approved' | 'rejected';
   createdAt: string;

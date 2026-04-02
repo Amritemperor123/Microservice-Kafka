@@ -1,6 +1,8 @@
 import { Kafka, Consumer, EachMessagePayload } from 'kafkajs';
 import { WebSocketServer, WebSocket } from 'ws';
 import db from './database';
+import { getWebSocketToken, verifyAdminToken } from './auth';
+import crypto from 'crypto';
 
 const kafka = new Kafka({
   clientId: 'admin-service',
@@ -13,11 +15,20 @@ const kafka = new Kafka({
 
 let consumer: Consumer;
 let wss: WebSocketServer;
+let consumerConnected = false;
 
 export function initWebSocketServer(server: any): WebSocketServer {
   wss = new WebSocketServer({ server });
 
-  wss.on('connection', (ws: WebSocket) => {
+  wss.on('connection', (ws: WebSocket, request: any) => {
+    const token = getWebSocketToken(request.url);
+    const auth = verifyAdminToken(token);
+
+    if (!auth.valid) {
+      ws.close(1008, 'Unauthorized');
+      return;
+    }
+
     console.log('Admin client connected to WebSocket');
 
     ws.on('close', () => {
@@ -42,6 +53,7 @@ export function broadcastToClients(data: any): void {
 export async function initKafkaConsumer(): Promise<Consumer> {
   consumer = kafka.consumer({ groupId: 'admin-service-group' });
   await consumer.connect();
+  consumerConnected = true;
 
   // Subscribe to all relevant topics
   await consumer.subscribe({ topic: 'certificate-requests', fromBeginning: false });
@@ -59,12 +71,46 @@ export async function initKafkaConsumer(): Promise<Consumer> {
         if (!value) return;
 
         const data = JSON.parse(value);
+        const eventId = data.eventId || crypto.createHash('sha1').update(`${topic}:${value}`).digest('hex');
+        const processedEvent = db.prepare('SELECT event_id FROM processed_events WHERE event_id = ?').get(eventId);
+        if (processedEvent) {
+          return;
+        }
 
         const eventData = {
           topic,
-          ...data,
+          eventId,
+          correlationId: data.correlationId,
           receivedAt: new Date().toISOString()
         };
+
+        if (topic === 'certificate-requests') {
+          Object.assign(eventData, {
+            service: data.service,
+            submissionId: data.submissionId,
+            timestamp: data.timestamp
+          });
+        } else if (topic === 'pdf-generation-requests') {
+          Object.assign(eventData, {
+            type: data.type,
+            submissionId: data.submissionId,
+            timestamp: data.timestamp
+          });
+        } else if (topic === 'pdf-generation-complete') {
+          Object.assign(eventData, {
+            submissionId: data.submissionId,
+            pdfId: data.pdfId,
+            pdfPath: data.pdfPath,
+            certificateType: data.certificateType,
+            timestamp: data.timestamp
+          });
+        } else if (topic === 'admin-logs') {
+          Object.assign(eventData, {
+            service: data.service,
+            action: data.action,
+            timestamp: data.timestamp
+          });
+        }
 
         console.log(`Received event on ${topic}:`, data.action || data.type || 'Event');
 
@@ -82,6 +128,7 @@ export async function initKafkaConsumer(): Promise<Consumer> {
               data.certificateType,
               data.timestamp
             );
+            db.prepare('INSERT INTO processed_events (event_id, topic) VALUES (?, ?)').run(eventId, topic);
           } catch (err: any) {
             console.error('Error saving PDF record:', err);
           }
@@ -89,9 +136,12 @@ export async function initKafkaConsumer(): Promise<Consumer> {
           try {
             const stmt = db.prepare('INSERT INTO logs (action, details) VALUES (?, ?)');
             stmt.run(data.action, JSON.stringify(data.details));
+            db.prepare('INSERT INTO processed_events (event_id, topic) VALUES (?, ?)').run(eventId, topic);
           } catch (err: any) {
             console.error('Error saving log:', err);
           }
+        } else {
+          db.prepare('INSERT INTO processed_events (event_id, topic) VALUES (?, ?)').run(eventId, topic);
         }
 
         broadcastToClients(eventData);
@@ -107,5 +157,10 @@ export async function initKafkaConsumer(): Promise<Consumer> {
 export async function disconnect(): Promise<void> {
   if (consumer) {
     await consumer.disconnect();
+    consumerConnected = false;
   }
+}
+
+export function getKafkaStatus() {
+  return { consumerConnected };
 }

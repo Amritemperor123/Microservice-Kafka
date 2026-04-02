@@ -8,15 +8,13 @@ export interface DeathCertificateForm {
   placeOfDeath: string;
   AadhaarNumber?: string;
   CauseOfDeath: string;
-  AadhaarFile?: File;
   issuingAuthority?: string;
   registrationNumber?: string;
   aadhaarConsentGiven: boolean;
 }
 
-export interface BirthCertificate extends Omit<DeathCertificateForm, 'fatherAadhaarFile' | 'motherAadhaarFile'> {
+export interface BirthCertificate extends DeathCertificateForm {
   id: string;
-  AadhaarFilePath?: string;
   aadhaarConsentTimestamp?: string;
   status: 'draft' | 'submitted' | 'approved' | 'rejected';
   createdAt: string;

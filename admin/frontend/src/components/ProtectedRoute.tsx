@@ -1,6 +1,6 @@
 import { ReactNode, useEffect, useState } from "react";
 import { Navigate, useLocation } from "react-router-dom";
-import { LoginPage } from "@/pages/LoginPage";
+import { isAuthenticated as hasAuthSession } from "@/lib/auth";
 
 interface ProtectedRouteProps {
   children: ReactNode;
@@ -11,9 +11,7 @@ export const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
   const location = useLocation();
 
   useEffect(() => {
-    // Check authentication status from localStorage
-    const authStatus = localStorage.getItem("isAuthenticated");
-    setIsAuthenticated(authStatus === "true");
+    setIsAuthenticated(hasAuthSession());
   }, []);
 
   // Show loading while checking authentication
@@ -30,7 +28,7 @@ export const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
 
   // If not authenticated, redirect to login
   if (!isAuthenticated) {
-    return <LoginPage />;
+    return <Navigate to="/login" replace state={{ from: location }} />;
   }
 
   // If authenticated, render the protected content

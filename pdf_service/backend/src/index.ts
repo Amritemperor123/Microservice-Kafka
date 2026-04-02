@@ -1,21 +1,45 @@
 import express from 'express';
-import { initProducer, disconnectProducer } from './kafka-producer';
-import { initConsumer, disconnectConsumer } from './kafka-consumer';
+import crypto from 'crypto';
+import { initProducer, disconnectProducer, isProducerConnected } from './kafka-producer';
+import { initConsumer, disconnectConsumer, flushPendingProducerEvents, isConsumerConnected } from './kafka-consumer';
 import db from './database';
 
 const app = express();
 const PORT = process.env.PORT || 3003;
+let outboxInterval: NodeJS.Timeout | null = null;
 
 app.use(express.json());
+app.use((req, res, next) => {
+    const requestId = (req.headers['x-request-id'] as string | undefined) || crypto.randomUUID();
+    res.locals.requestId = requestId;
+    res.setHeader('X-Request-Id', requestId);
+    console.log(JSON.stringify({ level: 'info', service: 'pdf-service', requestId, method: req.method, path: req.path, event: 'request.received' }));
+    next();
+});
+
+function isDatabaseHealthy(): boolean {
+    try {
+        db.prepare('SELECT 1').get();
+        return true;
+    } catch {
+        return false;
+    }
+}
 
 // Health check endpoint
 app.get('/health', (req, res) => {
+    const databaseHealthy = isDatabaseHealthy();
+    const kafkaStatus = {
+        producerConnected: isProducerConnected(),
+        consumerConnected: isConsumerConnected()
+    };
+    const isHealthy = kafkaStatus.producerConnected && kafkaStatus.consumerConnected && databaseHealthy;
     res.status(200).json({
-        status: 'healthy',
+        status: isHealthy ? 'healthy' : 'degraded',
         service: 'pdf-service',
         timestamp: new Date().toISOString(),
-        kafka: true, // Will be updated with actual Kafka connection status
-        database: true
+        kafka: kafkaStatus,
+        database: databaseHealthy
     });
 });
 
@@ -55,6 +79,9 @@ app.get('/pdf/:id', (req, res) => {
 // Graceful shutdown
 process.on('SIGINT', async () => {
     console.log('Shutting down PDF service...');
+    if (outboxInterval) {
+        clearInterval(outboxInterval);
+    }
     await disconnectConsumer();
     await disconnectProducer();
     process.exit(0);
@@ -62,6 +89,9 @@ process.on('SIGINT', async () => {
 
 process.on('SIGTERM', async () => {
     console.log('Shutting down PDF service...');
+    if (outboxInterval) {
+        clearInterval(outboxInterval);
+    }
     await disconnectConsumer();
     await disconnectProducer();
     process.exit(0);
@@ -72,6 +102,12 @@ async function start() {
     try {
         // Initialize Kafka producer and consumer
         await initProducer();
+        await flushPendingProducerEvents();
+        outboxInterval = setInterval(() => {
+            flushPendingProducerEvents().catch((error) => {
+                console.error('PDF service outbox flush failed:', error);
+            });
+        }, 5000);
         await initConsumer();
 
         // Start Express server
